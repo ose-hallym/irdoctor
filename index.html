@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<script>window.IRDOCTOR_SOURCES=["https://api.github.com/repos/ose-hallym/irdoctor/contents/board.json?ref=data","https://raw.githubusercontent.com/ose-hallym/irdoctor/data/board.json"];</script>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>지원 현황</title>
+<link rel="icon" href="data:,">
+<style>
+html, body { margin: 0; padding: 0; height: 100%; overflow: hidden; background: #0b0f14; }
+body { font-family: "Malgun Gothic", "맑은 고딕", "Apple SD Gothic Neo", "Noto Sans KR", sans-serif; color: #1f2937; }
+#stage { position: absolute; left: 0; top: 0; width: 1600px; height: 1200px; background: #fff; overflow: hidden;
+  -webkit-transform-origin: 0 0; -ms-transform-origin: 0 0; transform-origin: 0 0; }
+#bar { position: absolute; left: 0; top: 0; width: 1600px; height: 124px; background: #1f2a44; color: #fff; }
+#title { position: absolute; left: 48px; top: 0; height: 124px; line-height: 124px; font-size: 54px; font-weight: bold; letter-spacing: -1px; white-space: nowrap; }
+#meta { position: absolute; right: 48px; top: 0; height: 124px; text-align: right; font-size: 28px; line-height: 40px; padding-top: 20px; color: #d6dff2; }
+#meta b { color: #fff; font-weight: bold; }
+#conn { display: inline-block; visibility: hidden; margin-right: 18px; padding: 0 16px; line-height: 38px; border-radius: 19px;
+  background: #e53935; color: #fff; font-size: 24px; font-weight: bold; vertical-align: 2px; }
+#conn.off { visibility: visible; }
+#band { position: absolute; left: 0; top: 124px; width: 1600px; height: 8px; background: #8bc34a; }
+#wrap { position: absolute; left: 40px; top: 152px; width: 1520px; height: 980px; }
+#t { width: 1520px; border-collapse: collapse; table-layout: fixed; background: #fff; border: 2px solid #aab898; }
+#t th, #t td { border: 1px solid #d6decc; padding: 0; text-align: center; overflow: hidden; white-space: nowrap; }
+#t th { background: #e2f2d0; color: #24401a; font-weight: bold; border-color: #b9c8a4; }
+#t td.dept { background: #f0f8e8; text-align: left; padding-left: 24px; }
+#t td.g { border-left: 2px solid #aab898; }
+#t td.sum { background: #f6f9ef; }
+#t tr.alt td { background: #fafcf7; }
+#t tr.alt td.dept { background: #eaf4df; }
+#t tr.alt td.sum { background: #f1f6e8; }
+#t tr.tot td { background: #e6eaee; font-weight: bold; border-top: 2px solid #aab898; }
+#t tr.tot td.dept { background: #dde3e9; }
+#t .d { display: inline-block; text-align: right; width: 2.1em; font-variant-numeric: tabular-nums; }
+#t tr.tot .d { width: 2.7em; }
+#t td.ap .d { font-weight: bold; }
+#t .z { color: #8b95a1; }
+#t .over { color: #d32f2f; font-weight: bold; }
+#msg { position: absolute; left: 0; top: 0; width: 1520px; height: 980px; line-height: 980px; text-align: center; font-size: 40px; color: #6b7684; display: none; }
+#foot { position: absolute; left: 48px; right: 48px; top: 1148px; height: 52px; line-height: 52px; font-size: 24px; color: #5b6673; }
+#foot .r { float: right; }
+</style>
+</head>
+<body>
+<div id="stage">
+  <div id="bar">
+    <div id="title">지원 현황</div>
+    <div id="meta"><div><span id="conn">연결 끊김</span><span id="deadline"></span></div><div id="asof"></div></div>
+  </div>
+  <div id="band"></div>
+  <div id="wrap"><table id="t"></table><div id="msg">불러오는 중입니다</div></div>
+  <div id="foot"><span class="r" id="next"></span><span id="note">5분마다 자동으로 새로 고칩니다. 화면을 누르면 전체 화면이 됩니다.</span></div>
+</div>
+<script>
+(function () {
+  var REFRESH_MS = 300000;
+  var RETRY_MS = 30000;
+  var DESIGN_W = 1600, DESIGN_H = 1200, TABLE_H = 980;
+  var stage = document.getElementById('stage');
+  var table = document.getElementById('t');
+  var msg = document.getElementById('msg');
+  var conn = document.getElementById('conn');
+  var data = null;
+  var timer = null;
+
+  function pad(n) { return n < 10 ? '0' + n : '' + n; }
+  function hm(d) { return pad(d.getHours()) + ':' + pad(d.getMinutes()); }
+
+  function fit() {
+    var w = window.innerWidth || document.documentElement.clientWidth;
+    var h = window.innerHeight || document.documentElement.clientHeight;
+    var s = Math.min(w / DESIGN_W, h / DESIGN_H);
+    var x = (w - DESIGN_W * s) / 2, y = (h - DESIGN_H * s) / 2;
+    var t = 'translate(' + x + 'px,' + y + 'px) scale(' + s + ')';
+    stage.style.webkitTransform = t;
+    stage.style.msTransform = t;
+    stage.style.transform = t;
+  }
+
+  function el(tag, cls, text) {
+    var e = document.createElement(tag);
+    if (cls) e.className = cls;
+    if (text !== undefined) e.appendChild(document.createTextNode(text));
+    return e;
+  }
+
+  function num(n, cls) {
+    var s = el('span', 'd' + (n === 0 ? ' z' : '') + (cls ? ' ' + cls : ''), String(n));
+    return s;
+  }
+
+  function render() {
+    var d = data;
+    while (table.firstChild) table.removeChild(table.firstChild);
+    if (!d || !d.rows || d.rows.length === 0) {
+      table.style.display = 'none';
+      msg.style.display = 'block';
+      msg.firstChild.nodeValue = d ? '표시할 모집 정보가 아직 없습니다' : (conn.className === 'off' ? '서버에 연결할 수 없습니다. 자동으로 다시 시도합니다.' : '불러오는 중입니다');
+      return;
+    }
+    msg.style.display = 'none';
+    table.style.display = '';
+
+    var nh = d.hospitals.length;
+    var n = d.rows.length;
+    var hdr = 62;
+    var rowH = Math.floor((TABLE_H - 4 - 2 * hdr) / (n + 1));
+    var fs = Math.max(13, Math.min(34, Math.floor(rowH * 0.7)));
+    table.style.fontSize = fs + 'px';
+
+    var cg = el('colgroup');
+    var c0 = el('col'); c0.style.width = '22%'; cg.appendChild(c0);
+    for (var c = 0; c < (nh + 1) * 2; c++) cg.appendChild(el('col'));
+    table.appendChild(cg);
+
+    var thead = el('thead');
+    var r1 = el('tr'), r2 = el('tr');
+    r1.style.height = hdr + 'px'; r2.style.height = hdr + 'px';
+    var th = el('th', '', '진료과'); th.rowSpan = 2; th.style.fontSize = Math.round(fs * 1.1) + 'px'; r1.appendChild(th);
+    var k;
+    for (k = 0; k <= nh; k++) {
+      var h = el('th', '', k < nh ? d.hospitals[k].name : '계');
+      h.colSpan = 2; h.style.fontSize = Math.round(fs * 1.2) + 'px';
+      if (k > 0) h.style.borderLeft = '2px solid #aab898';
+      r1.appendChild(h);
+      var a = el('th', '', 'TO'), b = el('th', '', '지원');
+      a.style.fontSize = b.style.fontSize = Math.round(fs * 0.95) + 'px';
+      if (k > 0) a.style.borderLeft = '2px solid #aab898';
+      r2.appendChild(a); r2.appendChild(b);
+    }
+    thead.appendChild(r1); thead.appendChild(r2);
+    table.appendChild(thead);
+
+    var tbody = el('tbody');
+    var used = 0;
+    for (var i = 0; i <= n; i++) {
+      var row = i < n ? d.rows[i] : d.total;
+      var tr = el('tr', i === n ? 'tot' : (i % 2 ? 'alt' : ''));
+      var rh = i === n ? (TABLE_H - 4 - 2 * hdr - used) : rowH;
+      used += rh;
+      tr.style.height = rh + 'px';
+      tr.appendChild(el('td', 'dept', row.dept));
+      var sumTo = 0, sumAp = 0;
+      for (k = 0; k <= nh; k++) {
+        var to, ap;
+        if (k < nh) { to = row.to[k]; ap = row.applied[k]; sumTo += to; sumAp += ap; }
+        else { to = sumTo; ap = sumAp; }
+        var cls = (k === nh ? 'sum ' : '') + (k > 0 ? 'g' : '');
+        var tdTo = el('td', cls); tdTo.appendChild(num(to));
+        var tdAp = el('td', cls.replace('g', '') + ' ap'); tdAp.appendChild(num(ap, ap > to ? 'over' : ''));
+        if (ap > to) tdAp.firstChild.className = 'd over';
+        tr.appendChild(tdTo); tr.appendChild(tdAp);
+      }
+      tbody.appendChild(tr);
+    }
+    table.appendChild(tbody);
+  }
+
+  function showMeta() {
+    var d = data;
+    if (!d) return;
+    document.getElementById('title').firstChild.nodeValue = d.title;
+    document.title = d.title;
+    document.getElementById('deadline').innerHTML = '';
+    if (d.deadline) {
+      var dl = document.getElementById('deadline');
+      dl.appendChild(document.createTextNode('접수마감 '));
+      dl.appendChild(el('b', '', d.deadline));
+    }
+    var asof = document.getElementById('asof');
+    asof.innerHTML = '';
+    var now = new Date();
+    var day = now.getFullYear() + '-' + pad(now.getMonth() + 1) + '-' + pad(now.getDate());
+    var stamp = String(d.builtAt || '');
+    var text = stamp.substring(0, 10) === day ? stamp.substring(11, 16) : stamp.substring(5, 10).replace('-', '.') + ' ' + stamp.substring(11, 16);
+    asof.appendChild(document.createTextNode('기준 '));
+    asof.appendChild(el('b', '', text));
+  }
+
+  function setNext(ms, retry) {
+    var at = new Date(new Date().getTime() + ms);
+    var next = document.getElementById('next');
+    next.innerHTML = '';
+    next.appendChild(document.createTextNode((retry ? '다시 시도 ' : '다음 갱신 ') + hm(at)));
+  }
+
+  function schedule(ms, retry) {
+    if (timer) clearTimeout(timer);
+    setNext(ms, retry);
+    timer = setTimeout(load, ms);
+  }
+
+  function ok(d) {
+    data = d;
+    conn.className = '';
+    showMeta();
+    render();
+    schedule(REFRESH_MS, false);
+  }
+
+  function fail() {
+    conn.className = 'off';
+    if (!data) render();
+    schedule(RETRY_MS, true);
+  }
+
+  var SOURCES = window.IRDOCTOR_SOURCES;
+  var polls = 0;
+
+  function bust(url) {
+    polls++;
+    return url + (url.indexOf('?') < 0 ? '?' : '&') + '_=' + new Date().getTime() + polls;
+  }
+
+  // Fetches one URL; cb(true, data) on a 200 with valid JSON, cb(false) otherwise.
+  function request(url, accept, cb) {
+    var x = new XMLHttpRequest();
+    var done = false;
+    function finish(good, d) { if (done) return; done = true; cb(good, d); }
+    x.open('GET', bust(url), true);
+    if (accept) x.setRequestHeader('Accept', accept);
+    x.timeout = 15000;
+    x.onreadystatechange = function () {
+      if (x.readyState !== 4) return;
+      if (x.status !== 200) { finish(false); return; }
+      var d;
+      try { d = JSON.parse(x.responseText); } catch (e) { finish(false); return; }
+      finish(true, d);
+    };
+    x.ontimeout = function () { finish(false); };
+    x.onerror = function () { finish(false); };
+    try { x.send(); } catch (e) { finish(false); }
+  }
+
+  function loadFrom(i) {
+    request(SOURCES[i], 'application/vnd.github.raw+json', function (good, d) {
+      if (good) ok(d);
+      else if (i + 1 < SOURCES.length) loadFrom(i + 1);
+      else fail();
+    });
+  }
+
+  function load() {
+    if (SOURCES && SOURCES.length) { loadFrom(0); return; }
+    request('/api/board', null, function (good, d) { if (good) ok(d); else fail(); });
+  }
+
+  function toggleFullscreen() {
+    var de = document.documentElement;
+    try {
+      if (document.fullscreenElement || document.webkitFullscreenElement) {
+        (document.exitFullscreen || document.webkitExitFullscreen).call(document);
+      } else {
+        (de.requestFullscreen || de.webkitRequestFullscreen).call(de);
+      }
+    } catch (e) { }
+  }
+
+  document.addEventListener('click', toggleFullscreen);
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'f' || e.key === 'F') toggleFullscreen();
+    else if (e.key === 'r' || e.key === 'R') load();
+  });
+  window.addEventListener('resize', fit);
+  fit();
+  render();
+  load();
+})();
+</script>
+</body>
+</html>
